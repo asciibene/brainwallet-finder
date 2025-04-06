@@ -5,7 +5,7 @@ import requests
 import logging
 import os
 import time
-from eth_account import Account
+from eth_account import Account 
 import re
 from urllib.request import urlopen
 from time import sleep
@@ -13,7 +13,8 @@ from colorama import init, Fore, Style
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 from ratelimit import limits, sleep_and_retry
-import coincurve
+from sys import argv
+
 
 # Initialize colorama
 init(autoreset=True)
@@ -25,7 +26,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 RATE_LIMIT = 5# Max 1 request per second
 TIME_PERIOD = 1  # Time period in seconds for rate limit
 WEI_PER_ETH = 1e10
-API_KEY= "RJWQE7MKV6FCSGP41N8YHNMKJ9VATFN8ZD"
+ES_KEY= "RJWQE7MKV6FCSGP41N8YHNMKJ9VATFN8ZD"
 
 
 etherscan_tags = ['result']
@@ -36,13 +37,13 @@ etherscan_tags = ['result']
 def check_api_eth(address): 
     try:
         #Todo : send multiple address in 1 query.. use  |
-        url= f"https://api.etherscan.io/api?module=account&action=balance&address={address}&tag=latest&apikey={API_KEY}"
+        url= f"https://api.etherscan.io/api?module=account&action=balance&address={address}&tag=latest&apikey={ES_KEY}"
         start_time = time.time()
-        htmlfile = urlopen(url, timeout=10)
+        htmltext = urlopen(url, timeout=10).read().decode('utf-8')
         end_time = time.time()
         ping = end_time - start_time
-        htmltext = htmlfile.read().decode('utf-8')
-
+        if htmltext is None: raise("Empty reply from url")
+        
         ethscan_info = {t: float(re.search(rf'{t}":"(\d+)', htmltext).group(1)) for t in etherscan_tags}
         
         ethscan_info['result'] /= WEI_PER_ETH
@@ -52,12 +53,12 @@ def check_api_eth(address):
         print(f"Request failed for address {address}: {e}")
         return None
 
-def gen_wallet_eth(passphrase):
-    wallet = Account.create(passphrase)
+def gen_wallet_eth():
+    wallet = Account.create()
     return wallet.key, wallet.address
 
-def process_passphrase(passphrase):
-    private_key, address = gen_wallet_eth(passphrase)
+def process_iteration():
+    private_key, address = gen_wallet_eth()
     if not private_key or not address:
         raise(Error)
     
@@ -70,8 +71,9 @@ def process_passphrase(passphrase):
 
 def load_passphrases(input_file):
     try:
+        print("Loading passphrases from file..")
         with open(input_file, 'r') as f:
-            passphrases = [line.strip() for line in f]
+            passphrases = [line.strip() for line in tqdm(f)]
             return passphrases
     except FileNotFoundError:
         print(f"Input file {input_file} not found.")
@@ -91,38 +93,34 @@ def save_results(output_file,wallet_info):
 def main():
     input_file = os.getenv('INPUT_FILE', 'passphrases.txt')
     output_file = os.getenv('OUTPUT_FILE', 'wallets_with_balance.txt')
-    num_workers = int(os.getenv('NUM_WORKERS', 10))
-
-    passphrases = load_passphrases(input_file)
-    if not passphrases:
-        raise("No passphrases to process.")
-
+    num_workers = int(os.getenv('NUM_WORKERS', 2))
+    #passphrases = load_passphrases(input_file)
     addrs_with_bal = []
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
-        future_to_passphrase = {executor.submit(process_passphrase, passphrase): passphrase for passphrase in passphrases}
+        MAX_ITER = int(argv[1]) or 250
+        future_to_iter = {executor.submit(process_iteration): i for i in range(1,MAX_ITER)}
 
-        for future in tqdm(as_completed(future_to_passphrase), total=len(passphrases), desc="Processing passphrases"): 
+        for future in tqdm(as_completed(future_to_iter), total=MAX_ITER, desc="Processing iterations"): 
             try:
                 wallet_info = future.result()
                 
-                #TODO do same check for all wallet types
                 if wallet_info['result'] > 0:
                     status = Fore.GREEN + "ACTIVE!" + Style.RESET_ALL
-                    save_results(output_file,addr_info)
+                    save_results(output_file,wallet_info)
                 else:
                     status = Fore.RED + "DEAD" + Style.RESET_ALL
                 
                 # Print the details with status
                 print('Ethereum Wallet data >>> -------------')
-                for key, val in wallet_info:
+                for key, val in wallet_info.items():
                     print(f"{key}: {val}")
                 print(f"Status: {status}")
               
                 print()
             except Exception as e:
-                logging.error(f"Future processing failed: {e}")
+                print(f"Main Program Loop failed :  {e}")
 
-    logging.info(f"Processing complete. Results saved to {output_file}")
+    print(f"Processing complete. Results saved to {output_file}")
 
 if __name__ == "__main__":
     main()

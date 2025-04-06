@@ -107,7 +107,7 @@ def load_passphrases(input_file):
 def save_results(output_file,wallet_info,token):
     try:
         with open(output_file, 'a') as f_out:
-            f_out.write(f"======= {token} ============="
+            f_out.write(f"======= {token} =============")
             for key, val in wallet_info:
                 f_out.write(f"{key}: {val}\n")
             f_out.write("==============================\n")
@@ -141,7 +141,7 @@ def main():
                 
                 # Print the details with status
                 print('Bitcoin Wallet data >>> -------------')
-                for key, val in btc_info:
+                for key, val in btc_info.items():
                     print(f"{key}: {val}")
                 print(f"Status: {status}")
                 
