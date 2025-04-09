@@ -27,8 +27,8 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 os.environ['ECC_BACKEND_CLASS'] = 'eth_keys.backends.NativeECCBackend'
 
-RATE_LIMIT = 3# Max 1 request per second
-TIME_PERIOD = 10  # Time period in seconds for rate limit
+RATE_LIMIT = 1# Max 1 request per second
+TIME_PERIOD = 1  # Time period in seconds for rate limit
 WEI_PER_ETH = 1e10
 CHECK_TOKENS = False #TODO
 ES_KEY= "RJWQE7MKV6FCSGP41N8YHNMKJ9VATFN8ZD"
@@ -61,7 +61,7 @@ def check_address_balance_eth(address,privkey):
             dat['address'] = address
             dat['private_key'] = privkey
             wallets_multichain.append(dat)
-            time.sleep(0.25)
+            time.sleep(0.10)
         return wallets_multichain
     except Exception as e:
         print(f"Request failed for address {address}: {e}")
@@ -98,9 +98,9 @@ def load_passphrases(input_file):
 
 def save_results(output_file,wallet_info):
     try:
-        with open(output_file, 'a') as f_out:
+        with open(output_file, 'a+') as f_out:
             f_out.write(f"=======   ETH    =============")
-            for key, val in wallet_info:
+            for key, val in wallet_info.items():
                 f_out.write(f"{key}: {val}\n")
             f_out.write("==============================\n")
     except IOError as e:
