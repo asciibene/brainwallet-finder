@@ -7,7 +7,7 @@ import os
 import json
 import time
 from eth_account import Account 
-import re
+import re 
 from urllib.request import urlopen
 from time import sleep
 from colorama import init, Fore, Style
@@ -30,13 +30,14 @@ os.environ['ECC_BACKEND_CLASS'] = 'eth_keys.backends.NativeECCBackend'
 RATE_LIMIT = 1# Max 1 request per second
 TIME_PERIOD = 1  # Time period in seconds for rate limit
 WEI_PER_ETH = 1e10
-CHECK_TOKENS = False #TODO
+
 ES_KEY= "RJWQE7MKV6FCSGP41N8YHNMKJ9VATFN8ZD"
 ES_CHAINIDS={"etherscan": 1, 'bscscan': 56, 'ftmscan': 250, 'optimistic': 10, 'polygon': 137, 'arbitrum': 42161, 'gnosis': 100,'base': 8453,'avalanche': 43114,'zkSync': 324}
    
-
+CHECK_TOKENS = False #TODO
 TOKEN_CONTRACTS = {"name", 'hexaddr'}
 etherscan_tags = ['result']
+we_got_problems=False
 
 # Adjust the check_balance function
 @sleep_and_retry
@@ -71,7 +72,7 @@ def check_address_balance_eth(address,privkey):
 
 def gen_wallet_eth():
     wallet = Account.create()
-    #TODO fix encoding here for privaye key
+    #TODO fix encoding here for private key
     return wallet.key.hex(), wallet.address
 
 def process_iteration():
@@ -104,6 +105,7 @@ def save_results(output_file,wallet_info):
                 f_out.write(f"{key}: {val}\n")
             f_out.write("==============================\n")
     except IOError as e:
+        we_got_problems=True
         print(f"Failed to write results to {output_file}: {e}")
 
 
@@ -128,7 +130,7 @@ def main():
                         status = Fore.RED + "DEAD" + Style.RESET_ALL
                     
                     # Print the details with status
-                    print(Fore.BLUE + f'Wallet data >>> {w['chain']} -------------'+ Style.RESET_ALL)
+                    print(Fore.BLUE + f'Wallet data >>> {w["chain"]}' + Style.RESET_ALL )
                     for key, val in w.items():
                         print(f"{key}: {val}")
                     print(f"Status: {status}")

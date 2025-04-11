@@ -4,3 +4,5 @@ requests
 colorama
 tqdm
 ratelimit
+eth-account
+json
